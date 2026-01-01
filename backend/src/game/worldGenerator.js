@@ -3,52 +3,42 @@ const { TILE_GRASS, TILE_WATER, TILE_WALL, TILE_SAND } = require('./map')
 
 // Configuration
 const CHUNK_SIZE = 16 // 16x16 tiles per chunk
-const SEED = 12345 // Fixed seed for now, could be random
+const SEED = 12345 // Fixed seed for consistent world across all clients
 
-// Simple seeded random number generator (Park-Miller LCG)
-function createRandom(seed) {
-  let s = seed % 2147483647
-  if (s <= 0) s += 2147483646
-  return () => {
-    s = (s * 16807) % 2147483647
-    return (s - 1) / 2147483646
-  }
+// Create noise generators once at module load
+// These are stateless and deterministic - same input always gives same output
+const elevationNoise = makeNoise2D(() => 0.5) // Using constant seed for deterministic behavior
+const moistureNoise = makeNoise2D(() => 0.7) // Different constant for moisture
+
+// Hash function for deterministic noise based on coordinates
+function hash(x, y, seed) {
+  let h = seed
+  h = ((h << 5) - h + x) | 0
+  h = ((h << 5) - h + y) | 0
+  return h
 }
 
-// Helper to create a noise function with octaves
-function createNoiseGenerator({ frequency, octaves, seed }) {
-  const rand = createRandom(seed)
-  const noise2D = makeNoise2D(rand)
+// Get noise value with proper seeding for determinism
+function getNoise(noiseFunc, x, y, frequency, octaves, seed) {
+  let amplitude = 1
+  let freq = frequency
+  let value = 0
+  let max = 0
 
-  return {
-    get: (x, y) => {
-      let amplitude = 1
-      let freq = frequency
-      let value = 0
-      let max = 0
-
-      for (let i = 0; i < octaves; i++) {
-        value += noise2D(x * freq, y * freq) * amplitude
-        max += amplitude
-        amplitude *= 0.5
-        freq *= 2
-      }
-      // Normalize to 0..1 (assuming noise2D returns -1..1)
-      return (value / max + 1) / 2
-    },
+  for (let i = 0; i < octaves; i++) {
+    // Add seed offset to ensure deterministic results
+    const offsetX = hash(seed + i, 0, seed) / 2147483647
+    const offsetY = hash(seed + i, 1, seed) / 2147483647
+    
+    value += noiseFunc((x + offsetX) * freq, (y + offsetY) * freq) * amplitude
+    max += amplitude
+    amplitude *= 0.5
+    freq *= 2
   }
+  
+  // Normalize to 0..1 (noise2D returns -1..1)
+  return (value / max + 1) / 2
 }
-// Noise generators
-const elevationGen = createNoiseGenerator({
-  frequency: 0.05,
-  octaves: 4,
-  seed: SEED,
-})
-const moistureGen = createNoiseGenerator({
-  frequency: 0.03,
-  octaves: 2,
-  seed: SEED + 1,
-})
 
 /**
  * Generate a chunk of tiles at the given chunk coordinates (cx, cy)
@@ -66,9 +56,9 @@ function generateChunk(cx, cy) {
     for (let x = 0; x < CHUNK_SIZE; x++) {
       const worldX = cx * CHUNK_SIZE + x
 
-      // Get noise values
-      const elevation = elevationGen.get(worldX, worldY)
-      const moisture = moistureGen.get(worldX, worldY)
+      // Get noise values - now deterministic!
+      const elevation = getNoise(elevationNoise, worldX, worldY, 0.05, 4, SEED)
+      const moisture = getNoise(moistureNoise, worldX, worldY, 0.03, 2, SEED + 1000)
 
       let tile = TILE_GRASS
 

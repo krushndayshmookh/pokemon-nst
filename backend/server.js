@@ -157,18 +157,16 @@ io.on('connection', (socket) => {
       return
     }
 
+    // Check if we need to send new chunks (before updating position)
+    const oldCx = Math.floor(user.x / worldGenerator.CHUNK_SIZE)
+    const oldCy = Math.floor(user.y / worldGenerator.CHUNK_SIZE)
+
     // Update user position
     user.x = data.x
     user.y = data.y
     if (data.direction) {
       user.direction = data.direction
     }
-
-    // Check if we need to send new chunks
-    // Simple implementation: Send chunks if user crossed chunk boundary
-    // Ideally we'd track which chunks the user has and send missing ones
-    const oldCx = Math.floor(user.x / worldGenerator.CHUNK_SIZE)
-    const oldCy = Math.floor(user.y / worldGenerator.CHUNK_SIZE)
     
     if (cx !== oldCx || cy !== oldCy) {
       const newChunks = {}
@@ -213,6 +211,82 @@ io.on('connection', (socket) => {
         displayName: user.displayName,
         text: message.substring(0, 200), // Limit length
         timestamp: new Date().toISOString()
+      })
+    }
+  })
+
+  socket.on('interact', async (data) => {
+    const fromUser = connectedUsers.get(socket.id)
+    if (!fromUser) return
+
+    const { targetUserId, interactionType, message } = data
+
+    // Find target user's socket
+    const targetSocket = Array.from(connectedUsers.entries())
+      .find(([_, user]) => user.userId === targetUserId)?.[0]
+
+    if (!targetSocket) {
+      socket.emit('interaction-error', { error: 'User not found' })
+      return
+    }
+
+    const targetUser = connectedUsers.get(targetSocket)
+
+    // Check proximity (within 3 tiles)
+    const distance = Math.sqrt(
+      Math.pow(fromUser.x - targetUser.x, 2) + 
+      Math.pow(fromUser.y - targetUser.y, 2)
+    )
+
+    if (distance > 3) {
+      socket.emit('interaction-error', { error: 'User too far away' })
+      return
+    }
+
+    // Store interaction in database
+    try {
+      await database.run(
+        `INSERT INTO interactions (from_user_id, to_user_id, interaction_type, message)
+         VALUES (?, ?, ?, ?)`,
+        [fromUser.userId, targetUserId, interactionType || 'hello', message || '']
+      )
+
+      // Send interaction to target user
+      io.to(targetSocket).emit('interaction-received', {
+        interactionId: Date.now(), // Temporary ID
+        fromUserId: fromUser.userId,
+        fromDisplayName: fromUser.displayName,
+        interactionType: interactionType || 'hello',
+        message: message || '',
+        timestamp: new Date().toISOString()
+      })
+
+      // Confirm to sender
+      socket.emit('interaction-sent', {
+        targetUserId,
+        targetDisplayName: targetUser.displayName
+      })
+    } catch (error) {
+      console.error('Interaction error:', error)
+      socket.emit('interaction-error', { error: 'Failed to send interaction' })
+    }
+  })
+
+  socket.on('interaction-response', async (data) => {
+    const user = connectedUsers.get(socket.id)
+    if (!user) return
+
+    const { fromUserId, accepted } = data
+
+    // Find sender's socket
+    const senderSocket = Array.from(connectedUsers.entries())
+      .find(([_, u]) => u.userId === fromUserId)?.[0]
+
+    if (senderSocket) {
+      io.to(senderSocket).emit('interaction-response-received', {
+        fromUserId: user.userId,
+        fromDisplayName: user.displayName,
+        accepted
       })
     }
   })

@@ -65,7 +65,7 @@ Backend serves both API routes and SPA fallback (`/*` → `index.html`)
 
 ### State Management
 
-- **Pinia stores** in [frontend/src/stores/](frontend/src/stores/): `auth.js` holds JWT token and user data
+- **Pinia stores** in [frontend/src/stores/](frontend/src/stores/): `auth.js` holds JWT token and user data, `interactions.js` manages interaction notifications and nearby players
 - **No global Vuex**: Each store file exports `useXxxStore()` composable
 - **Socket state**: Reactive object in [socket.js](frontend/src/socket.js) (`socketState.connected`)
 
@@ -90,6 +90,8 @@ Backend serves both API routes and SPA fallback (`/*` → `index.html`)
 - `authenticate`: Send `{ userId, username, displayName }` after JWT login
 - `move`: Send `{ x, y, direction }` for player movement
 - `chat-message`: Send `{ text }` for global chat
+- `interact`: Send `{ targetUserId, interactionType, message }` to interact with nearby player
+- `interaction-response`: Send `{ fromUserId, accepted }` to respond to interaction
 
 **Server → Client**:
 
@@ -97,6 +99,10 @@ Backend serves both API routes and SPA fallback (`/*` → `index.html`)
 - `chunks`: Sends map data as `{ cx_cy: { data: [[tiles]] } }`
 - `user-moved`: Broadcasts player position updates
 - `chat-message`: Relays chat to all clients
+- `interaction-received`: Notifies player of incoming interaction
+- `interaction-sent`: Confirms interaction was sent
+- `interaction-response-received`: Notifies of interaction response
+- `interaction-error`: Returns error message
 
 ## Environment Configuration
 
@@ -129,14 +135,17 @@ Backend serves both API routes and SPA fallback (`/*` → `index.html`)
 
 ## Planned Features & Roadmap
 
-### Near-Term Features (MVP Completion)
+### Recently Completed
 
-**Interaction System** - Proximity-based player interactions
-
-- Detect players within 2-3 tiles
-- "Say Hello" / "Talk" actions with notification system
+**Interaction System** ✅ - Proximity-based player interactions
+- Players within 3 tiles detected automatically
+- "Say Hello" / "Wave" / "Talk" actions with notification system
 - Interaction history stored in `interactions` table
 - Socket events: `interact`, `interaction-received`, `interaction-response`
+- UI components: InteractionPrompt.vue, NotificationBadge.vue
+- Keyboard shortcut: Space key to greet nearest player
+
+### Near-Term Features (Next Up)
 
 **Mouse Controls** - Click-to-move and enhanced UI
 

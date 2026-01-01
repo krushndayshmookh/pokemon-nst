@@ -3,6 +3,9 @@
     <div class="game-header">
       <div class="user-info">
         <span>Playing as: <strong>{{ authStore.user?.displayName }}</strong></span>
+        <span v-if="currentUser" class="coordinates">
+          Position: ({{ Math.floor(currentUser.x) }}, {{ Math.floor(currentUser.y) }})
+        </span>
       </div>
       <button @click="handleLogout" class="btn-logout">Logout</button>
     </div>
@@ -69,8 +72,12 @@
     </div>
 
     <div class="controls-hint">
-      Use Arrow Keys or WASD to move
+      Use Arrow Keys or WASD to move • Press Space to interact with nearby players
     </div>
+
+    <!-- Interaction Components -->
+    <InteractionPrompt :nearby-players="nearbyPlayersWithDistance" />
+    <NotificationBadge />
   </div>
 </template>
 
@@ -78,12 +85,16 @@
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { useInteractionsStore } from '@/stores/interactions'
 import { socket } from '@/socket'
 import TileBlock from '@/components/TileBlock.vue'
 import UserBlock from '@/components/UserBlock.vue'
+import InteractionPrompt from '@/components/InteractionPrompt.vue'
+import NotificationBadge from '@/components/NotificationBadge.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
+const interactionsStore = useInteractionsStore()
 
 // Constants
 const TILE_SIZE = 64
@@ -140,6 +151,21 @@ const otherUsers = computed(() => {
   return Array.from(usersMap.value.values())
 })
 
+const nearbyPlayersWithDistance = computed(() => {
+  if (!currentUser.value) return []
+
+  return otherUsers.value
+    .map(user => ({
+      ...user,
+      distance: Math.sqrt(
+        Math.pow(user.x - currentUser.value.x, 2) +
+        Math.pow(user.y - currentUser.value.y, 2)
+      )
+    }))
+    .filter(user => user.distance <= 3)
+    .sort((a, b) => a.distance - b.distance)
+})
+
 // Socket Event Handlers
 function onConnect() {
   console.log('Socket connected, authenticating...')
@@ -183,7 +209,6 @@ function onUserMoved(data) {
 }
 
 function onUserLeft(data) {
-  console.log('User left:', data)
   usersMap.value.delete(data.userId)
 }
 
@@ -203,8 +228,40 @@ function onChatMessage(data) {
 }
 
 function onAuthError(error) {
-  console.error('Auth error:', error)
-  // Maybe redirect to login or show error
+  authStore.logout()
+  router.push('/login')
+}
+
+function onInteractionReceived(data) {
+  interactionsStore.addNotification(data)
+}
+
+function onInteractionSent(data) {
+  messages.value.push({
+    displayName: 'System',
+    text: `Interaction sent to ${data.targetDisplayName}`,
+    timestamp: new Date().toISOString()
+  })
+}
+
+function onInteractionResponseReceived(data) {
+  const message = data.accepted
+    ? `${data.fromDisplayName} accepted your interaction!`
+    : `${data.fromDisplayName} declined your interaction.`
+
+  messages.value.push({
+    displayName: 'System',
+    text: message,
+    timestamp: new Date().toISOString()
+  })
+}
+
+function onInteractionError(error) {
+  messages.value.push({
+    displayName: 'System',
+    text: `Interaction failed: ${error.error}`,
+    timestamp: new Date().toISOString()
+  })
 }
 
 // Chat Logic
@@ -266,6 +323,17 @@ function handleKeydown(e) {
   // Don't move if typing in input (handled by @keydown.stop on input, but good safety)
   if (e.target.tagName === 'INPUT') return
 
+  // Space key for quick interaction with closest player
+  if (e.key === ' ' && nearbyPlayersWithDistance.value.length > 0) {
+    const closest = nearbyPlayersWithDistance.value[0]
+    socket.emit('interact', {
+      targetUserId: closest.userId,
+      interactionType: 'hello',
+      message: '👋 Hello!'
+    })
+    return
+  }
+
   switch (e.key) {
     case 'ArrowUp':
     case 'w':
@@ -313,6 +381,10 @@ onMounted(() => {
   socket.on('user-left', onUserLeft)
   socket.on('chat-message', onChatMessage)
   socket.on('auth-error', onAuthError)
+  socket.on('interaction-received', onInteractionReceived)
+  socket.on('interaction-sent', onInteractionSent)
+  socket.on('interaction-response-received', onInteractionResponseReceived)
+  socket.on('interaction-error', onInteractionError)
 
   // Connect if not already connected
   if (!socket.connected) {
@@ -335,6 +407,10 @@ onUnmounted(() => {
   socket.off('user-left', onUserLeft)
   socket.off('chat-message', onChatMessage)
   socket.off('auth-error', onAuthError)
+  socket.off('interaction-received', onInteractionReceived)
+  socket.off('interaction-sent', onInteractionSent)
+  socket.off('interaction-response-received', onInteractionResponseReceived)
+  socket.off('interaction-error', onInteractionError)
 
   window.removeEventListener('keydown', handleKeydown)
   socket.disconnect()
@@ -363,6 +439,18 @@ onUnmounted(() => {
   background: rgba(0, 0, 0, 0.2);
   border-radius: 8px;
 }
+
+/* .user-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.coordinates {
+  font-size: 0.85rem;
+  color: #bdc3c7;
+  font-family: 'Courier New', monospace;
+} */
 
 .game-layout {
   display: flex;
