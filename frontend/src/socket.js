@@ -3,39 +3,21 @@ import { io } from 'socket.io-client'
 
 export const socketState = reactive({
   connected: false,
-  moveEvents: [],
-  userId: 0,
-  location: {
-    x: 1,
-    y: 0,
-  },
+  userId: null,
 })
 
-// "undefined" means the URL will be computed from the `window.location` object
-const URL = 'http://192.168.136.126:3000'
-// const URL = window.location
+const URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:3000'
 
-export const socket = io(URL)
+export const socket = io(URL, {
+  autoConnect: false
+})
 
 socket.on('connect', () => {
   socketState.connected = true
+  console.log('Connected to server')
 })
 
 socket.on('disconnect', () => {
   socketState.connected = false
+  console.log('Disconnected from server')
 })
-
-// socket.on('move', (evt) => {
-//   socketState.moveEvents.push(evt)
-//   console.log(evt)
-// })
-
-socket.on('join', (evt) => {
-  console.log('join', evt)
-})
-
-// socket.on('welcome', (evt) => {
-//   console.log(evt)
-//   socketState.userId = evt.id
-//   socketState.location = { x: evt.x, y: evt.y }
-// })

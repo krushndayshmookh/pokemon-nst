@@ -4,179 +4,174 @@
     :style="`
       width: calc(64px * ${blockCountX});
       height: calc(64px * ${blockCountY});
-
     `"
   >
-    <!-- <TileBlock v-for="(n, idx) in blockCountX * blockCountY" /> -->
-
-    <UserBlock v-for="user in users" :loc="user.loc" :user-id="user.id" />
+    <UserBlock
+      v-for="user in users"
+      :key="user.id"
+      :loc="user.loc"
+      :user-id="user.id"
+    />
   </div>
-
-  <!-- margin-left: ${marginLeft}px;
-      margin-top: ${marginTop}px; -->
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
 import { onKeyStroke } from '@vueuse/core'
-
-import TileBlock from './components/TileBlock.vue'
 import UserBlock from './components/UserBlock.vue'
-
 import { socket, socketState } from '@/socket'
 
 const BLOCK_SIZE = 64
 
 const blockCountX = ref(0)
 const blockCountY = ref(0)
-
-const marginLeft = ref(0)
-const marginTop = ref(0)
-
 const users = ref([])
-const currentUserId = ref(0)
+const currentUserId = ref(null)
 
-onMounted(() => {
-  const width = window.innerWidth
-  const height = window.innerHeight
-
-  blockCountX.value = Math.floor(width / BLOCK_SIZE)
-  blockCountY.value = Math.floor(height / BLOCK_SIZE)
-
-  marginLeft.value = (width - 2 - BLOCK_SIZE * blockCountX.value) / 2
-  marginTop.value = (height - 2 - BLOCK_SIZE * blockCountY.value) / 2
-
-  // users.value = [
-  //   { loc: socketState.location, id: socketState.userId },
-  //   // { loc: { x: 5, y: 7 }, id: 1 },
-  //   // { loc: { x: 3, y: 5 }, id: 2 },
-  //   // { loc: { x: 7, y: 5 }, id: 3 },
-  //   // { loc: { x: 3, y: 6 }, id: 4 },
-  //   // { loc: { x: 8, y: 5 }, id: 5 },
-  //   // { loc: { x: 2, y: 7 }, id: 6 },
-  //   // { loc: { x: 1, y: 8 }, id: 7 },
-  //   // { loc: { x: 2, y: 4 }, id: 8 },
-  // ]
-
-  if (!socketState.connected) socket.connect()
-})
-
-socket.on('welcome', (evt) => {
-  currentUserId.value = evt.id
-})
-
-socket.on('join', (evt) => {
-  console.log('join in comp', evt)
-  users.value.push({
-    id: evt.id,
-    loc: {
-      ...evt,
-    },
-  })
-  // currentUserId.value = evt.id
-})
-
-socket.on('move', (evt) => {
-  const userId = evt.id
-
-  const user = users.value.find((u) => u.id == userId)
-  if (!user) {
-    users.value.push({
-      id: evt.id,
-      loc: {
-        ...evt,
-      },
-    })
-  } else {
-    const userIdx = users.value.findIndex((u) => u.id == userId)
-    users.value[userIdx] = {
-      id: evt.id,
-      loc: {
-        ...evt,
-      },
-    }
-  }
-})
-
-const moveUser = (id, dir) => {
-  const userIdx = users.value.findIndex((u) => u.id == id)
-  const user = users.value[userIdx]
-
-  const newLoc = { ...users.value[userIdx].loc }
-
-  switch (dir) {
-    case 'left':
-      newLoc.x = newLoc.x - 1
-      break
-
-    case 'right':
-      newLoc.x = newLoc.x + 1
-      break
-
-    case 'down':
-      newLoc.y = newLoc.y + 1
-      break
-
-    case 'up':
-      newLoc.y = newLoc.y - 1
-      break
-
-    default:
-      break
-  }
-
-  const isOccupied = users.value.find((u) => {
-    return u.loc.x == newLoc.x && u.loc.y == newLoc.y
-  })
-
-  if (!isOccupied) {
-    users.value[userIdx].loc = { ...newLoc }
-    socket.emit('move', { user: user.id, ...newLoc })
-  } else {
-    // alert('Occupied')
-    console.log('already occupied')
-  }
+const calculateGridSize = () => {
+  blockCountX.value = Math.floor(window.innerWidth / BLOCK_SIZE)
+  blockCountY.value = Math.floor(window.innerHeight / BLOCK_SIZE)
 }
 
+const isValidPosition = (x, y) => {
+  return x >= 1 && x <= blockCountX.value && y >= 1 && y <= blockCountY.value
+}
+
+const isPositionOccupied = (x, y, excludeUserId = null) => {
+  return users.value.some(user =>
+    user.id !== excludeUserId && user.loc.x === x && user.loc.y === y
+  )
+}
+
+const moveUser = (direction) => {
+  const userIdx = users.value.findIndex(u => u.id === currentUserId.value)
+  if (userIdx === -1) return
+
+  const user = users.value[userIdx]
+  const newLoc = { x: user.loc.x, y: user.loc.y }
+
+  switch (direction) {
+    case 'left':
+      newLoc.x -= 1
+      break
+    case 'right':
+      newLoc.x += 1
+      break
+    case 'down':
+      newLoc.y += 1
+      break
+    case 'up':
+      newLoc.y -= 1
+      break
+  }
+
+  // Validate position
+  if (!isValidPosition(newLoc.x, newLoc.y)) {
+    console.log('Out of bounds')
+    return
+  }
+
+  if (isPositionOccupied(newLoc.x, newLoc.y, currentUserId.value)) {
+    console.log('Position occupied')
+    return
+  }
+
+  // Update local state and emit to server
+  users.value[userIdx].loc = newLoc
+  socket.emit('move', newLoc)
+}
+
+onMounted(() => {
+  calculateGridSize()
+  window.addEventListener('resize', calculateGridSize)
+
+  if (!socketState.connected) {
+    socket.connect()
+  }
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', calculateGridSize)
+})
+
+// Socket event handlers
+socket.on('welcome', (userData) => {
+  currentUserId.value = userData.id
+  console.log('Welcome! Your ID:', userData.id)
+})
+
+socket.on('existing-users', (existingUsers) => {
+  // Add all existing users except ourselves
+  existingUsers.forEach(user => {
+    if (user.id !== currentUserId.value && !users.value.some(u => u.id === user.id)) {
+      users.value.push({
+        id: user.id,
+        loc: { x: user.x, y: user.y }
+      })
+    }
+  })
+})
+
+socket.on('join', (userData) => {
+  // Add new user if not already in list
+  if (!users.value.some(u => u.id === userData.id)) {
+    users.value.push({
+      id: userData.id,
+      loc: { x: userData.x, y: userData.y }
+    })
+    console.log('User joined:', userData.id)
+  }
+})
+
+socket.on('move', (data) => {
+  const userIdx = users.value.findIndex(u => u.id === data.id)
+
+  if (userIdx !== -1) {
+    users.value[userIdx].loc = { x: data.x, y: data.y }
+  } else {
+    // User not found, add them
+    users.value.push({
+      id: data.id,
+      loc: { x: data.x, y: data.y }
+    })
+  }
+})
+
+socket.on('user-left', (data) => {
+  const userIdx = users.value.findIndex(u => u.id === data.id)
+  if (userIdx !== -1) {
+    users.value.splice(userIdx, 1)
+    console.log('User left:', data.id)
+  }
+})
+
+// Keyboard controls
 onKeyStroke('ArrowDown', (e) => {
   e.preventDefault()
-  console.log('Move Down')
-  moveUser(currentUserId.value, 'down')
+  moveUser('down')
 })
 
 onKeyStroke('ArrowUp', (e) => {
   e.preventDefault()
-  console.log('Move Up')
-  moveUser(currentUserId.value, 'up')
+  moveUser('up')
 })
 
 onKeyStroke('ArrowLeft', (e) => {
   e.preventDefault()
-  console.log('Move Left')
-  moveUser(currentUserId.value, 'left')
+  moveUser('left')
 })
 
 onKeyStroke('ArrowRight', (e) => {
   e.preventDefault()
-  console.log('Move Right')
-  moveUser(currentUserId.value, 'right')
+  moveUser('right')
 })
 </script>
 
 <style scoped>
 #playground {
-  width: 100vw;
-  height: 100vh;
   display: block;
   position: absolute;
-  border: 1px solid black;
-
-  background-color: azure;
-}
-
-.user-layer {
-  background-color: blue;
-  position: absolute;
-  z-index: 200;
+  background-color: #e0f7fa;
+  border: 1px solid #333;
 }
 </style>

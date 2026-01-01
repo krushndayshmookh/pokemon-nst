@@ -7,38 +7,76 @@ const app = express()
 const server = createServer(app)
 const io = new Server(server, {
   cors: {
-    origin: '*',
+    origin: process.env.CORS_ORIGIN || '*',
   },
 })
 
 app.use(cors())
-app.use(express.json())
-app.use(express.urlencoded())
+app.use(express.static('../frontend/dist'))
 
-app.post('/move', (req, res) => {
-  // console.log(req.body)
-})
+const PORT = process.env.PORT || 3000
+const MAX_POKEMON_ID = 441
 
-let count = 0
-const connectedUsers = []
+let nextUserId = 0
+const connectedUsers = new Map() // Map<socketId, userData>
 
 io.on('connection', (socket) => {
-  console.log('a user connected')
+  const userId = nextUserId++
+  const userData = { 
+    id: userId, 
+    x: 1, 
+    y: 1,
+    socketId: socket.id 
+  }
+  
+  connectedUsers.set(socket.id, userData)
+  console.log(`User ${userId} connected (${connectedUsers.size} total users)`)
 
-  const newUser = { id: count++, x: 1, y: 1 }
-  socket.emit('welcome', newUser)
-  io.emit('join', newUser)
-  connectedUsers.push(newUser)
+  // Send current user their info
+  socket.emit('welcome', userData)
+  
+  // Broadcast new user to all clients
+  io.emit('join', userData)
+  
+  // Send all existing users to the new user
+  const existingUsers = Array.from(connectedUsers.values())
+  socket.emit('existing-users', existingUsers)
 
   socket.on('move', (evt) => {
-    console.log(evt)
+    const user = connectedUsers.get(socket.id)
+    
+    if (!user) {
+      console.error('Move event from unknown user')
+      return
+    }
 
-    io.emit('move', evt)
+    // Validate movement
+    if (typeof evt.x !== 'number' || typeof evt.y !== 'number') {
+      console.error('Invalid move data')
+      return
+    }
+
+    // Update user position
+    user.x = evt.x
+    user.y = evt.y
+    
+    // Broadcast to all clients
+    io.emit('move', { id: user.id, x: evt.x, y: evt.y })
+  })
+
+  socket.on('disconnect', () => {
+    const user = connectedUsers.get(socket.id)
+    
+    if (user) {
+      connectedUsers.delete(socket.id)
+      console.log(`User ${user.id} disconnected (${connectedUsers.size} remaining)`)
+      
+      // Notify all clients that user left
+      io.emit('user-left', { id: user.id })
+    }
   })
 })
 
-app.use(express.static('../frontend/dist'))
-
-server.listen(3000, () => {
-  console.log('Server listening on http://localhost:3000...')
+server.listen(PORT, () => {
+  console.log(`Server listening on http://localhost:${PORT}...`)
 })
