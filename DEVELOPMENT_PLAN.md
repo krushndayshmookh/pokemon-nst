@@ -1,6 +1,7 @@
 # Pokemon NST - Development Plan
 
 ## 🎯 Project Vision
+
 A multiplayer Pokemon exploration game with authentication, procedural world generation, and real-time interactions.
 
 ---
@@ -8,12 +9,14 @@ A multiplayer Pokemon exploration game with authentication, procedural world gen
 ## 📋 Core Features (MVP)
 
 ### Authentication & User Management
+
 - Simple username/password authentication
 - JWT-based session management
 - SQLite database for user storage
 - Display name + baby Pokemon selection on registration
 
 ### Gameplay
+
 - Infinite procedurally generated map
 - Real-time multiplayer movement
 - Proximity-based interactions
@@ -21,6 +24,7 @@ A multiplayer Pokemon exploration game with authentication, procedural world gen
 - Full keyboard + mouse controls
 
 ### Future Features
+
 - Pokemon evolution
 - Team formation
 - Additional Pokemon collection
@@ -33,6 +37,7 @@ A multiplayer Pokemon exploration game with authentication, procedural world gen
 ## 🏗️ Technical Architecture
 
 ### Backend Stack
+
 - Node.js + Express
 - Socket.IO (real-time communication)
 - SQLite3 (database)
@@ -40,6 +45,7 @@ A multiplayer Pokemon exploration game with authentication, procedural world gen
 - bcrypt (password hashing)
 
 ### Frontend Stack
+
 - Vue 3 (Composition API)
 - Vite
 - Socket.IO Client
@@ -145,6 +151,7 @@ CREATE TABLE interactions (
 ### **Phase 1: Authentication & Database Setup** (Days 1-2)
 
 **Backend:**
+
 - Install dependencies: `sqlite3`, `jsonwebtoken`, `bcrypt`, `axios`
 - Set up SQLite database with schema
 - Create PokeAPI data fetcher service
@@ -159,12 +166,14 @@ CREATE TABLE interactions (
   - `GET /api/pokemon/:id` - Get Pokemon details
 
 **Database:**
+
 - Initialize SQLite database
-- Fetch all Pokemon data from PokeAPI (https://pokeapi.co/api/v2/)
+- Fetch all Pokemon data from PokeAPI (<https://pokeapi.co/api/v2/>)
 - Store Pokemon, types, stats, evolution chains
 - Seed starter Pokemon flags (Bulbasaur, Charmander, Squirtle, Pikachu, etc.)
 
 **PokeAPI Integration:**
+
 - Fetch from `/pokemon?limit=1000` for all Pokemon
 - Fetch from `/pokemon/{id}` for individual details
 - Fetch from `/evolution-chain/{id}` for evolution data
@@ -172,6 +181,7 @@ CREATE TABLE interactions (
 - Handle rate limiting (100 requests/minute)
 
 **Tasks:**
+
 - [ ] Install backend dependencies (including axios)
 - [ ] Create database schema and migrations
 - [ ] Build PokeAPI fetcher service
@@ -188,6 +198,7 @@ CREATE TABLE interactions (
 ### **Phase 2: Start Screen & Login/Register UI** (Days 3-4)
 
 **Frontend:**
+
 - Create login/register views
 - Baby Pokemon selection interface
 - Form validation
@@ -195,12 +206,14 @@ CREATE TABLE interactions (
 - Protected route guards
 
 **Components:**
+
 - `LoginView.vue` - Login form
 - `RegisterView.vue` - Registration form
 - `StarterPicker.vue` - Baby Pokemon selection grid
 - `AuthLayout.vue` - Wrapper for auth pages
 
 **Tasks:**
+
 - [ ] Create login form with validation
 - [ ] Create register form with validation
 - [ ] Build Pokemon picker component
@@ -214,23 +227,27 @@ CREATE TABLE interactions (
 ### **Phase 3: Procedural Map Generation** (Days 5-7)
 
 **Algorithm:**
+
 - Use Perlin/Simplex noise for terrain generation
 - Chunk-based loading (render only visible chunks)
 - Tile types: grass, water, dirt, trees, rocks
 - Generate chunks on-demand as player moves
 
 **Backend:**
+
 - Seed-based generation (consistent world for all players)
 - Store world seed in database
 - API endpoint: `GET /api/world/chunk/:x/:y`
 
 **Frontend:**
+
 - Canvas rendering system
 - Tile atlas/sprite system
 - Chunk manager (load/unload chunks)
 - Viewport rendering (only draw visible tiles)
 
 **Tasks:**
+
 - [ ] Install noise generation library
 - [ ] Implement chunk generation algorithm
 - [ ] Create tile rendering system
@@ -243,6 +260,7 @@ CREATE TABLE interactions (
 ### **Phase 4: Enhanced Movement & Camera** (Days 8-9)
 
 **Features:**
+
 - Camera follows player
 - Smooth scrolling
 - Infinite world boundaries
@@ -250,12 +268,14 @@ CREATE TABLE interactions (
 - Position persistence in database
 
 **Socket Events:**
+
 - `move` - Player movement
 - `player-joined` - New player enters viewport
 - `player-left` - Player leaves viewport
 - `players-nearby` - Get nearby players on connect
 
 **Tasks:**
+
 - [ ] Implement camera system
 - [ ] Add viewport-based player loading
 - [ ] Update movement to use world coordinates
@@ -268,6 +288,7 @@ CREATE TABLE interactions (
 ### **Phase 5: Interaction System** (Days 10-12)
 
 **Features:**
+
 - Proximity detection (players within 2-3 tiles)
 - Interaction prompt when near another player
 - "Say Hello" / "Talk" actions
@@ -276,17 +297,20 @@ CREATE TABLE interactions (
 - Response system (Accept/Ignore)
 
 **Socket Events:**
+
 - `interact` - Send interaction to nearby player
 - `interaction-received` - Receive interaction notification
 - `interaction-response` - Respond to interaction
 
 **UI Components:**
+
 - Interaction prompt overlay
 - Notification badges
 - Chat bubble above player
 - Interaction history panel (optional)
 
 **Tasks:**
+
 - [ ] Implement proximity detection
 - [ ] Create interaction UI components
 - [ ] Build notification system
@@ -300,6 +324,7 @@ CREATE TABLE interactions (
 ### **Phase 6: Mouse Controls & Polish** (Days 13-14)
 
 **Features:**
+
 - Click-to-move pathfinding
 - Click on player to interact
 - Hover states and tooltips
@@ -308,6 +333,7 @@ CREATE TABLE interactions (
 - Bug fixes
 
 **Controls:**
+
 - **Keyboard:**
   - Arrow keys / WASD - Move
   - Space / Enter - Interact with nearby player
@@ -320,6 +346,7 @@ CREATE TABLE interactions (
   - Drag - Pan camera (optional)
 
 **Tasks:**
+
 - [ ] Implement click-to-move with A* pathfinding
 - [ ] Add player click interactions
 - [ ] Create hover tooltips
@@ -333,6 +360,7 @@ CREATE TABLE interactions (
 ## 🎮 Controls Reference
 
 ### Keyboard
+
 - **Arrow Keys / WASD** - Move character
 - **Space / Enter** - Interact with nearby player
 - **Escape** - Close dialogs
@@ -341,6 +369,7 @@ CREATE TABLE interactions (
 - **I** - Inventory (future)
 
 ### Mouse
+
 - **Click terrain** - Move to location
 - **Click player** - Open interaction menu
 - **Scroll wheel** - Zoom in/out (future)
@@ -351,12 +380,14 @@ CREATE TABLE interactions (
 ## 📦 New Dependencies to Install
 
 ### Backend
+
 ```bash
 cd backend
 npm install sqlite3 jsonwebtoken bcrypt dotenv axios
 ```
 
 ### Frontend
+
 ```bash
 cd frontend
 pnpm add fast-simplex-noise pathfinding
@@ -366,7 +397,7 @@ pnpm add fast-simplex-noise pathfinding
 
 ## 🗂️ Proposed File Structure
 
-```
+```txt
 pokemon-nst/
 ├── backend/
 │   ├── src/
@@ -433,6 +464,7 @@ pokemon-nst/
 ## 🚀 Getting Started
 
 1. **Install dependencies:**
+
    ```bash
    pnpm install
    cd backend && npm install sqlite3 jsonwebtoken bcrypt dotenv axios
@@ -440,6 +472,7 @@ pokemon-nst/
    ```
 
 2. **Set up environment variables:**
+
    ```bash
    # backend/.env
    JWT_SECRET=your_super_secret_key_here
@@ -449,12 +482,14 @@ pokemon-nst/
    ```
 
 3. **Fetch and seed Pokemon data:**
+
    ```bash
    cd backend
    node scripts/seedPokeapi.js
    ```
 
 4. **Start development:**
+
    ```bash
    pnpm dev
    ```
@@ -479,6 +514,7 @@ pokemon-nst/
 ## 🔮 Future Enhancements
 
 ### Phase 7+
+
 - Pokemon evolution system
 - Battle system (turn-based)
 - Team formation (multiplayer parties)
@@ -523,7 +559,7 @@ pokemon-nst/
 
 ## 📚 Resources & Libraries
 
-- **PokeAPI:** https://pokeapi.co - Official Pokemon API
+- **PokeAPI:** <https://pokeapi.co> - Official Pokemon API
 - **Noise Generation:** `fast-simplex-noise`
 - **Pathfinding:** `pathfinding` (A* algorithm)
 - **JWT:** `jsonwebtoken`
@@ -533,7 +569,8 @@ pokemon-nst/
 - **Canvas Rendering:** Native Canvas API
 - **State Management:** Pinia
 
-### PokeAPI Endpoints Used:
+### PokeAPI Endpoints Used
+
 - `/pokemon?limit=1000` - List all Pokemon
 - `/pokemon/{id}` - Get Pokemon details
 - `/pokemon-species/{id}` - Get species info (baby status)
