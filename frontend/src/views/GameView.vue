@@ -9,7 +9,7 @@
 
     <div class="game-layout">
       <div class="viewport">
-        <div class="grid" :style="{ width: `${GRID_WIDTH * TILE_SIZE}px`, height: `${GRID_HEIGHT * TILE_SIZE}px` }">
+        <div class="grid" :style="{ width: `${GRID_WIDTH * TILE_SIZE}px`, height: `${GRID_HEIGHT * TILE_SIZE}px`, ...cameraStyle }">
           <!-- Render Grid Tiles -->
           <template v-if="mapData.length > 0">
             <div v-for="(row, y) in mapData" :key="y" class="row">
@@ -81,6 +81,8 @@ const authStore = useAuthStore()
 const TILE_SIZE = 64
 const GRID_WIDTH = ref(20)
 const GRID_HEIGHT = ref(15)
+const VIEWPORT_WIDTH = 640
+const VIEWPORT_HEIGHT = 480
 
 // State
 const currentUser = ref(null)
@@ -89,6 +91,29 @@ const messages = ref([])
 const newMessage = ref('')
 const chatMessagesRef = ref(null)
 const mapData = ref([])
+
+const cameraStyle = computed(() => {
+  if (!currentUser.value) return {}
+  
+  // Calculate center position
+  const centerX = VIEWPORT_WIDTH / 2 - TILE_SIZE / 2
+  const centerY = VIEWPORT_HEIGHT / 2 - TILE_SIZE / 2
+  
+  // Calculate desired camera position (negative because we move the grid)
+  let camX = -(currentUser.value.x * TILE_SIZE) + centerX
+  let camY = -(currentUser.value.y * TILE_SIZE) + centerY
+  
+  // Clamp camera to map bounds
+  const minX = -(GRID_WIDTH.value * TILE_SIZE) + VIEWPORT_WIDTH
+  const minY = -(GRID_HEIGHT.value * TILE_SIZE) + VIEWPORT_HEIGHT
+  
+  camX = Math.min(0, Math.max(minX, camX))
+  camY = Math.min(0, Math.max(minY, camY))
+  
+  return {
+    transform: `translate(${camX}px, ${camY}px)`
+  }
+})
 
 const otherUsers = computed(() => {
   return Array.from(usersMap.value.values())
@@ -311,16 +336,20 @@ onUnmounted(() => {
 }
 
 .viewport {
-  overflow: auto;
+  width: 640px; /* 10 tiles wide */
+  height: 480px; /* 7.5 tiles high */
+  overflow: hidden;
   border: 4px solid #34495e;
   border-radius: 4px;
   background: #2c3e50;
   box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+  position: relative;
 }
 
 .grid {
-  position: relative;
+  position: absolute;
   background: #2c3e50;
+  transition: transform 0.2s ease;
 }
 
 .row {
