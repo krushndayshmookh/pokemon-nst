@@ -134,6 +134,9 @@ io.on('connection', (socket) => {
     // Update user position
     user.x = data.x
     user.y = data.y
+    if (data.direction) {
+      user.direction = data.direction
+    }
 
     // Save to database (debounced in production)
     try {
@@ -149,7 +152,8 @@ io.on('connection', (socket) => {
     socket.broadcast.emit('user-moved', {
       userId: user.userId,
       x: data.x,
-      y: data.y
+      y: data.y,
+      direction: user.direction
     })
   })
 

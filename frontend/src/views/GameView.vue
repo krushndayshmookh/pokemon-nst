@@ -27,6 +27,7 @@
             :loc="{ x: user.x, y: user.y }"
             :pokemon-id="user.pokemonId"
             :display-name="user.displayName"
+            :direction="user.direction"
           />
 
           <!-- Render Current User -->
@@ -35,6 +36,7 @@
             :loc="{ x: currentUser.x, y: currentUser.y }"
             :pokemon-id="currentUser.pokemonId"
             :display-name="currentUser.displayName"
+            :direction="currentUser.direction"
             class="current-user"
           />
         </div>
@@ -94,22 +96,22 @@ const mapData = ref([])
 
 const cameraStyle = computed(() => {
   if (!currentUser.value) return {}
-  
+
   // Calculate center position
   const centerX = VIEWPORT_WIDTH / 2 - TILE_SIZE / 2
   const centerY = VIEWPORT_HEIGHT / 2 - TILE_SIZE / 2
-  
+
   // Calculate desired camera position (negative because we move the grid)
   let camX = -(currentUser.value.x * TILE_SIZE) + centerX
   let camY = -(currentUser.value.y * TILE_SIZE) + centerY
-  
+
   // Clamp camera to map bounds
   const minX = -(GRID_WIDTH.value * TILE_SIZE) + VIEWPORT_WIDTH
   const minY = -(GRID_HEIGHT.value * TILE_SIZE) + VIEWPORT_HEIGHT
-  
+
   camX = Math.min(0, Math.max(minX, camX))
   camY = Math.min(0, Math.max(minY, camY))
-  
+
   return {
     transform: `translate(${camX}px, ${camY}px)`
   }
@@ -157,6 +159,9 @@ function onUserMoved(data) {
   if (user) {
     user.x = data.x
     user.y = data.y
+    if (data.direction) {
+      user.direction = data.direction
+    }
   }
 }
 
@@ -218,8 +223,12 @@ function move(dx, dy) {
   currentUser.value.x = newX
   currentUser.value.y = newY
 
+  // Update direction
+  if (dx > 0) currentUser.value.direction = 'right'
+  if (dx < 0) currentUser.value.direction = 'left'
+
   // Emit to server
-  socket.emit('move', { x: newX, y: newY })
+  socket.emit('move', { x: newX, y: newY, direction: currentUser.value.direction })
 }
 
 function handleKeydown(e) {

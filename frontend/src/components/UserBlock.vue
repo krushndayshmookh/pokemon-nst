@@ -6,7 +6,7 @@
       top: calc(64px * ${loc.y});
     `"
   >
-    <div class="user-sprite">
+    <div class="user-sprite" :class="{ flipped: direction === 'right' }">
       <img
         :src="`/images/pokemon/${pokemonId}.png`"
         :alt="`Pokemon ${pokemonId}`"
@@ -31,6 +31,10 @@ defineProps({
   displayName: {
     type: String,
     required: true
+  },
+  direction: {
+    type: String,
+    default: 'right'
   }
 })
 </script>
@@ -48,6 +52,11 @@ defineProps({
   .user-sprite {
     width: 100%;
     height: 100%;
+    transition: transform 0.2s ease;
+
+    &.flipped {
+      transform: scaleX(-1);
+    }
 
     img {
       display: block;
