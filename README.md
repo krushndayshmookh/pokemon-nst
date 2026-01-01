@@ -31,24 +31,18 @@ A real-time multiplayer grid-based game where users move Pokemon avatars on a sh
 
 ### Prerequisites
 - Node.js >= 20.19.0 or >= 22.12.0
-- pnpm (recommended) or npm
+- pnpm >= 8.0.0
 
 ### Installation
 
-1. Clone the repository
-2. Install dependencies:
+This is a monorepo setup using pnpm workspaces. Install all dependencies from the root:
 
 ```bash
-# Install frontend dependencies
-cd frontend
+# Install all dependencies (root + workspaces)
 pnpm install
-
-# Install backend dependencies
-cd ../backend
-npm install
 ```
 
-3. Configure environment variables:
+### Configuration
 
 **Backend** (`backend/.env`):
 ```env
@@ -61,36 +55,46 @@ CORS_ORIGIN=*
 VITE_SOCKET_URL=http://localhost:3000
 ```
 
+Copy the `.env.example` files and configure as needed.
+
 ### Development
 
-Run both servers:
+Run both frontend and backend in development mode:
 
 ```bash
-# Terminal 1 - Backend
-cd backend
-npm run dev
-
-# Terminal 2 - Frontend
-cd frontend
+# From root directory - runs both servers concurrently
 pnpm dev
 ```
 
-The frontend will be available at `http://localhost:5173` (or the port Vite assigns).
-The backend runs on `http://localhost:3000`.
+This will start:
+- Frontend dev server at `http://localhost:5173` (Vite)
+- Backend server at `http://localhost:3000`
 
-### Production Build
+Or run them separately:
 
 ```bash
-# Build frontend
-cd frontend
-pnpm build
+# Terminal 1 - Backend
+pnpm dev:backend
 
-# Start backend (serves built frontend)
-cd ../backend
-npm start
+# Terminal 2 - Frontend
+pnpm dev:frontend
 ```
 
-The production app will be served at `http://localhost:3000`.
+### Production Build & Start
+
+Build the frontend and start the backend server (which serves the built frontend):
+
+```bash
+# From root directory
+pnpm start
+```
+
+This will:
+1. Build the frontend (`npm run build`)
+2. Start the backend server at `http://localhost:3000`
+3. The backend serves the built frontend from `/frontend/dist`
+
+The complete production app will be available at `http://localhost:3000`.
 
 ## How to Play
 

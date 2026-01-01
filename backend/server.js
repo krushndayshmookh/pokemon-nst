@@ -1,5 +1,6 @@
 const express = require('express')
 const cors = require('cors')
+const path = require('node:path')
 const { createServer } = require('node:http')
 const { Server } = require('socket.io')
 
@@ -12,7 +13,15 @@ const io = new Server(server, {
 })
 
 app.use(cors())
-app.use(express.static('../frontend/dist'))
+
+// Serve static files from frontend dist
+const frontendDist = path.join(__dirname, '../frontend/dist')
+app.use(express.static(frontendDist))
+
+// Fallback to index.html for SPA routing
+app.get('*', (req, res) => {
+  res.sendFile(path.join(frontendDist, 'index.html'))
+})
 
 const PORT = process.env.PORT || 3000
 const MAX_POKEMON_ID = 441
