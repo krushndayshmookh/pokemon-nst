@@ -6,6 +6,7 @@ const { createServer } = require('node:http')
 const { Server } = require('socket.io')
 const database = require('./src/config/database')
 const gameMap = require('./src/game/map')
+const worldGenerator = require('./src/game/worldGenerator')
 
 const app = express()
 const server = createServer(app)
@@ -89,12 +90,24 @@ io.on('connection', (socket) => {
       // Send welcome with user data
       socket.emit('authenticated', userData)
       
-      // Send map data
-      socket.emit('map-data', {
-        map: gameMap.map,
-        width: gameMap.WIDTH,
-        height: gameMap.HEIGHT
-      })
+      // Send initial chunks around player
+      const cx = Math.floor(userData.x / worldGenerator.CHUNK_SIZE)
+      const cy = Math.floor(userData.y / worldGenerator.CHUNK_SIZE)
+      const chunks = {}
+      
+      // Load 3x3 chunks around player
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const key = worldGenerator.getChunkKey(cx + dx, cy + dy)
+          chunks[key] = {
+            x: cx + dx,
+            y: cy + dy,
+            data: worldGenerator.generateChunk(cx + dx, cy + dy)
+          }
+        }
+      }
+
+      socket.emit('map-chunks', chunks)
 
       // Send existing nearby players
       const nearbyUsers = Array.from(connectedUsers.values()).filter(u => u.socketId !== socket.id)
@@ -121,7 +134,20 @@ io.on('connection', (socket) => {
     }
 
     // Check collision
-    if (!gameMap.isWalkable(data.x, data.y)) {
+    // Calculate chunk coordinates
+    const cx = Math.floor(data.x / worldGenerator.CHUNK_SIZE)
+    const cy = Math.floor(data.y / worldGenerator.CHUNK_SIZE)
+    const chunk = worldGenerator.generateChunk(cx, cy)
+    
+    // Calculate local coordinates within chunk
+    // Handle negative coordinates correctly for modulo
+    const lx = ((data.x % worldGenerator.CHUNK_SIZE) + worldGenerator.CHUNK_SIZE) % worldGenerator.CHUNK_SIZE
+    const ly = ((data.y % worldGenerator.CHUNK_SIZE) + worldGenerator.CHUNK_SIZE) % worldGenerator.CHUNK_SIZE
+    
+    const tile = chunk[ly][lx]
+    
+    // 0 = Grass, 3 = Sand. Others are blocked.
+    if (tile !== gameMap.TILE_GRASS && tile !== gameMap.TILE_SAND) {
       // Reset user position to last known valid position
       socket.emit('user-moved', {
         userId: user.userId,
@@ -136,6 +162,27 @@ io.on('connection', (socket) => {
     user.y = data.y
     if (data.direction) {
       user.direction = data.direction
+    }
+
+    // Check if we need to send new chunks
+    // Simple implementation: Send chunks if user crossed chunk boundary
+    // Ideally we'd track which chunks the user has and send missing ones
+    const oldCx = Math.floor(user.x / worldGenerator.CHUNK_SIZE)
+    const oldCy = Math.floor(user.y / worldGenerator.CHUNK_SIZE)
+    
+    if (cx !== oldCx || cy !== oldCy) {
+      const newChunks = {}
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const key = worldGenerator.getChunkKey(cx + dx, cy + dy)
+          newChunks[key] = {
+            x: cx + dx,
+            y: cy + dy,
+            data: worldGenerator.generateChunk(cx + dx, cy + dy)
+          }
+        }
+      }
+      socket.emit('map-chunks', newChunks)
     }
 
     // Save to database (debounced in production)

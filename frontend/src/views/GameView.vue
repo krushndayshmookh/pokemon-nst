@@ -9,16 +9,22 @@
 
     <div class="game-layout">
       <div class="viewport">
-        <div class="grid" :style="{ width: `${GRID_WIDTH * TILE_SIZE}px`, height: `${GRID_HEIGHT * TILE_SIZE}px`, ...cameraStyle }">
+        <div class="grid" :style="cameraStyle">
           <!-- Render Grid Tiles -->
-          <template v-if="mapData.length > 0">
-            <div v-for="(row, y) in mapData" :key="y" class="row">
+          <div v-for="chunk in visibleChunks" :key="`${chunk.x},${chunk.y}`"
+               class="chunk"
+               :style="{
+                 left: `${chunk.x * CHUNK_SIZE * TILE_SIZE}px`,
+                 top: `${chunk.y * CHUNK_SIZE * TILE_SIZE}px`,
+                 width: `${CHUNK_SIZE * TILE_SIZE}px`,
+                 height: `${CHUNK_SIZE * TILE_SIZE}px`
+               }">
+            <div v-for="(row, y) in chunk.data" :key="y" class="row">
               <div v-for="(tileType, x) in row" :key="`${x}-${y}`" class="tile-wrapper">
                 <TileBlock :type="tileType" />
               </div>
             </div>
-          </template>
-          <div v-else class="loading-map">Loading map...</div>
+          </div>
 
           <!-- Render Other Users -->
           <UserBlock
@@ -81,8 +87,7 @@ const authStore = useAuthStore()
 
 // Constants
 const TILE_SIZE = 64
-const GRID_WIDTH = ref(20)
-const GRID_HEIGHT = ref(15)
+const CHUNK_SIZE = 16
 const VIEWPORT_WIDTH = 640
 const VIEWPORT_HEIGHT = 480
 
@@ -92,7 +97,7 @@ const usersMap = ref(new Map())
 const messages = ref([])
 const newMessage = ref('')
 const chatMessagesRef = ref(null)
-const mapData = ref([])
+const chunks = ref({}) // Map<string, ChunkData>
 
 const cameraStyle = computed(() => {
   if (!currentUser.value) return {}
@@ -105,16 +110,30 @@ const cameraStyle = computed(() => {
   let camX = -(currentUser.value.x * TILE_SIZE) + centerX
   let camY = -(currentUser.value.y * TILE_SIZE) + centerY
 
-  // Clamp camera to map bounds
-  const minX = -(GRID_WIDTH.value * TILE_SIZE) + VIEWPORT_WIDTH
-  const minY = -(GRID_HEIGHT.value * TILE_SIZE) + VIEWPORT_HEIGHT
-
-  camX = Math.min(0, Math.max(minX, camX))
-  camY = Math.min(0, Math.max(minY, camY))
+  // No clamping for infinite world
 
   return {
     transform: `translate(${camX}px, ${camY}px)`
   }
+})
+
+const visibleChunks = computed(() => {
+  if (!currentUser.value) return []
+
+  const cx = Math.floor(currentUser.value.x / CHUNK_SIZE)
+  const cy = Math.floor(currentUser.value.y / CHUNK_SIZE)
+
+  const visible = []
+  // Render 3x3 chunks around player
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      const key = `${cx + dx},${cy + dy}`
+      if (chunks.value[key]) {
+        visible.push(chunks.value[key])
+      }
+    }
+  }
+  return visible
 })
 
 const otherUsers = computed(() => {
@@ -131,11 +150,9 @@ function onConnect() {
   })
 }
 
-function onMapData(data) {
-  console.log('Map data received:', data)
-  mapData.value = data.map
-  GRID_WIDTH.value = data.width
-  GRID_HEIGHT.value = data.height
+function onMapChunks(newChunks) {
+  console.log('Map chunks received:', Object.keys(newChunks).length)
+  chunks.value = { ...chunks.value, ...newChunks }
 }
 
 function onAuthenticated(userData) {
@@ -205,18 +222,27 @@ function move(dx, dy) {
   const newX = currentUser.value.x + dx
   const newY = currentUser.value.y + dy
 
-  // Boundary checks
-  if (newX < 0 || newX >= GRID_WIDTH.value || newY < 0 || newY >= GRID_HEIGHT.value) {
-    return
-  }
+  // No boundary checks for infinite world
 
   // Collision check
-  if (mapData.value.length > 0) {
-    const tile = mapData.value[newY][newX]
+  const cx = Math.floor(newX / CHUNK_SIZE)
+  const cy = Math.floor(newY / CHUNK_SIZE)
+  const key = `${cx},${cy}`
+  const chunk = chunks.value[key]
+
+  if (chunk) {
+    // Handle negative coordinates correctly for modulo
+    const lx = ((newX % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE
+    const ly = ((newY % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE
+
+    const tile = chunk.data[ly][lx]
     // 0 = Grass, 3 = Sand. Others are blocked.
     if (tile !== 0 && tile !== 3) {
       return
     }
+  } else {
+    // Don't move into unloaded chunks
+    return
   }
 
   // Update local state immediately
@@ -280,7 +306,7 @@ onMounted(() => {
   // Setup socket listeners
   socket.on('connect', onConnect)
   socket.on('authenticated', onAuthenticated)
-  socket.on('map-data', onMapData)
+  socket.on('map-chunks', onMapChunks)
   socket.on('existing-users', onExistingUsers)
   socket.on('user-joined', onUserJoined)
   socket.on('user-moved', onUserMoved)
@@ -302,7 +328,7 @@ onUnmounted(() => {
   // Cleanup listeners
   socket.off('connect', onConnect)
   socket.off('authenticated', onAuthenticated)
-  socket.off('map-data', onMapData)
+  socket.off('map-chunks', onMapChunks)
   socket.off('existing-users', onExistingUsers)
   socket.off('user-joined', onUserJoined)
   socket.off('user-moved', onUserMoved)
@@ -359,6 +385,13 @@ onUnmounted(() => {
   position: absolute;
   background: #2c3e50;
   transition: transform 0.2s ease;
+  /* Infinite grid doesn't have fixed size */
+}
+
+.chunk {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
 }
 
 .row {
