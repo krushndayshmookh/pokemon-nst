@@ -1,8 +1,10 @@
+require('dotenv').config()
 const express = require('express')
 const cors = require('cors')
 const path = require('node:path')
 const { createServer } = require('node:http')
 const { Server } = require('socket.io')
+const database = require('./src/config/database')
 
 const app = express()
 const server = createServer(app)
@@ -12,65 +14,137 @@ const io = new Server(server, {
   },
 })
 
+// Middleware
 app.use(cors())
+app.use(express.json())
+
+// Initialize database
+database.connect().catch(err => {
+  console.error('Failed to connect to database:', err)
+  process.exit(1)
+})
+
+// API Routes
+const authRoutes = require('./src/routes/auth')
+const pokemonRoutes = require('./src/routes/pokemon')
+
+app.use('/api/auth', authRoutes)
+app.use('/api/pokemon', pokemonRoutes)
+
+// Health check
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() })
+})
 
 // Serve static files from frontend dist
 const frontendDist = path.join(__dirname, '../frontend/dist')
 app.use(express.static(frontendDist))
 
-// Fallback to index.html for SPA routing
-app.get('*', (req, res) => {
+// SPA Fallback
+app.get(/.*/, (req, res) => {
   res.sendFile(path.join(frontendDist, 'index.html'))
 })
 
 const PORT = process.env.PORT || 3000
-const MAX_POKEMON_ID = 441
-
-let nextUserId = 0
 const connectedUsers = new Map() // Map<socketId, userData>
 
 io.on('connection', (socket) => {
-  const userId = nextUserId++
-  const userData = { 
-    id: userId, 
-    x: 1, 
-    y: 1,
-    socketId: socket.id 
-  }
-  
-  connectedUsers.set(socket.id, userData)
-  console.log(`User ${userId} connected (${connectedUsers.size} total users)`)
+  console.log(`Socket connected: ${socket.id}`)
 
-  // Send current user their info
-  socket.emit('welcome', userData)
-  
-  // Broadcast new user to all clients
-  io.emit('join', userData)
-  
-  // Send all existing users to the new user
-  const existingUsers = Array.from(connectedUsers.values())
-  socket.emit('existing-users', existingUsers)
+  socket.on('authenticate', async (data) => {
+    try {
+      const { userId, username, displayName } = data
+      
+      // Get user's active Pokemon and position
+      const user = await database.get(
+        `SELECT u.id, u.username, u.display_name,
+                up.x, up.y,
+                upk.pokemon_id
+         FROM users u
+         LEFT JOIN user_positions up ON u.id = up.user_id
+         LEFT JOIN user_pokemon upk ON u.id = upk.user_id AND upk.is_active = 1
+         WHERE u.id = ?`,
+        [userId]
+      )
 
-  socket.on('move', (evt) => {
+      if (!user) {
+        socket.emit('auth-error', { error: 'User not found' })
+        return
+      }
+
+      const userData = {
+        userId: user.id,
+        username: user.username,
+        displayName: user.display_name,
+        socketId: socket.id,
+        x: user.x || 0,
+        y: user.y || 0,
+        pokemonId: user.pokemon_id
+      }
+
+      connectedUsers.set(socket.id, userData)
+      console.log(`User authenticated: ${userData.displayName} (${connectedUsers.size} online)`)
+
+      // Send welcome with user data
+      socket.emit('authenticated', userData)
+
+      // Send existing nearby players
+      const nearbyUsers = Array.from(connectedUsers.values()).filter(u => u.socketId !== socket.id)
+      socket.emit('existing-users', nearbyUsers)
+
+      // Broadcast new user to others
+      socket.broadcast.emit('user-joined', userData)
+    } catch (error) {
+      console.error('Auth error:', error)
+      socket.emit('auth-error', { error: 'Authentication failed' })
+    }
+  })
+
+  socket.on('move', async (data) => {
     const user = connectedUsers.get(socket.id)
     
     if (!user) {
-      console.error('Move event from unknown user')
       return
     }
 
     // Validate movement
-    if (typeof evt.x !== 'number' || typeof evt.y !== 'number') {
-      console.error('Invalid move data')
+    if (typeof data.x !== 'number' || typeof data.y !== 'number') {
       return
     }
 
     // Update user position
-    user.x = evt.x
-    user.y = evt.y
-    
-    // Broadcast to all clients
-    io.emit('move', { id: user.id, x: evt.x, y: evt.y })
+    user.x = data.x
+    user.y = data.y
+
+    // Save to database (debounced in production)
+    try {
+      await database.run(
+        "UPDATE user_positions SET x = ?, y = ?, updated_at = datetime('now') WHERE user_id = ?",
+        [data.x, data.y, user.userId]
+      )
+    } catch (error) {
+      console.error('Failed to save position:', error)
+    }
+
+    // Broadcast to others
+    socket.broadcast.emit('user-moved', {
+      userId: user.userId,
+      x: data.x,
+      y: data.y
+    })
+  })
+
+  socket.on('chat-message', (message) => {
+    const user = connectedUsers.get(socket.id)
+    if (user && message && typeof message === 'string') {
+      // Broadcast to all clients including sender
+      io.emit('chat-message', {
+        userId: user.userId,
+        displayName: user.displayName,
+        text: message.substring(0, 200), // Limit length
+        timestamp: new Date().toISOString()
+      })
+    }
   })
 
   socket.on('disconnect', () => {
@@ -78,14 +152,25 @@ io.on('connection', (socket) => {
     
     if (user) {
       connectedUsers.delete(socket.id)
-      console.log(`User ${user.id} disconnected (${connectedUsers.size} remaining)`)
+      console.log(`User disconnected: ${user.displayName} (${connectedUsers.size} remaining)`)
       
-      // Notify all clients that user left
-      io.emit('user-left', { id: user.id })
+      socket.broadcast.emit('user-left', { userId: user.userId })
     }
   })
 })
 
 server.listen(PORT, () => {
-  console.log(`Server listening on http://localhost:${PORT}...`)
+  console.log(`🚀 Server listening on http://localhost:${PORT}`)
+  console.log(`📡 Socket.IO ready`)
+  console.log(`🗄️  Database: ${database.db ? 'Connected' : 'Not connected'}`)
+})
+
+// Graceful shutdown
+process.on('SIGTERM', async () => {
+  console.log('SIGTERM received, closing server...')
+  await database.close()
+  server.close(() => {
+    console.log('Server closed')
+    process.exit(0)
+  })
 })
