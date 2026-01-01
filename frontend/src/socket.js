@@ -14,10 +14,8 @@ export const socket = io(URL, {
 
 socket.on('connect', () => {
   socketState.connected = true
-  console.log('Connected to server')
 })
 
 socket.on('disconnect', () => {
   socketState.connected = false
-  console.log('Disconnected from server')
 })

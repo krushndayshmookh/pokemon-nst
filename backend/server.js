@@ -48,7 +48,7 @@ app.get(/.*/, (req, res) => {
 })
 
 const PORT = process.env.PORT || 3000
-const connectedUsers = new Map() // Map<socketId, userData>
+const connectedUsers = new Map()
 
 io.on('connection', (socket) => {
   console.log(`Socket connected: ${socket.id}`)
