@@ -11,9 +11,14 @@
       <div class="viewport">
         <div class="grid" :style="{ width: `${GRID_WIDTH * TILE_SIZE}px`, height: `${GRID_HEIGHT * TILE_SIZE}px` }">
           <!-- Render Grid Tiles -->
-          <div v-for="i in GRID_WIDTH * GRID_HEIGHT" :key="i" class="tile-wrapper">
-            <TileBlock />
-          </div>
+          <template v-if="mapData.length > 0">
+            <div v-for="(row, y) in mapData" :key="y" class="row">
+              <div v-for="(tileType, x) in row" :key="`${x}-${y}`" class="tile-wrapper">
+                <TileBlock :type="tileType" />
+              </div>
+            </div>
+          </template>
+          <div v-else class="loading-map">Loading map...</div>
 
           <!-- Render Other Users -->
           <UserBlock
@@ -74,8 +79,8 @@ const authStore = useAuthStore()
 
 // Constants
 const TILE_SIZE = 64
-const GRID_WIDTH = 20
-const GRID_HEIGHT = 15
+const GRID_WIDTH = ref(20)
+const GRID_HEIGHT = ref(15)
 
 // State
 const currentUser = ref(null)
@@ -83,6 +88,7 @@ const usersMap = ref(new Map())
 const messages = ref([])
 const newMessage = ref('')
 const chatMessagesRef = ref(null)
+const mapData = ref([])
 
 const otherUsers = computed(() => {
   return Array.from(usersMap.value.values())
@@ -96,6 +102,13 @@ function onConnect() {
     username: authStore.user.username,
     displayName: authStore.user.displayName
   })
+}
+
+function onMapData(data) {
+  console.log('Map data received:', data)
+  mapData.value = data.map
+  GRID_WIDTH.value = data.width
+  GRID_HEIGHT.value = data.height
 }
 
 function onAuthenticated(userData) {
@@ -163,8 +176,17 @@ function move(dx, dy) {
   const newY = currentUser.value.y + dy
 
   // Boundary checks
-  if (newX < 0 || newX >= GRID_WIDTH || newY < 0 || newY >= GRID_HEIGHT) {
+  if (newX < 0 || newX >= GRID_WIDTH.value || newY < 0 || newY >= GRID_HEIGHT.value) {
     return
+  }
+
+  // Collision check
+  if (mapData.value.length > 0) {
+    const tile = mapData.value[newY][newX]
+    // 0 = Grass, 3 = Sand. Others are blocked.
+    if (tile !== 0 && tile !== 3) {
+      return
+    }
   }
 
   // Update local state immediately
@@ -224,6 +246,7 @@ onMounted(() => {
   // Setup socket listeners
   socket.on('connect', onConnect)
   socket.on('authenticated', onAuthenticated)
+  socket.on('map-data', onMapData)
   socket.on('existing-users', onExistingUsers)
   socket.on('user-joined', onUserJoined)
   socket.on('user-moved', onUserMoved)
@@ -245,6 +268,7 @@ onUnmounted(() => {
   // Cleanup listeners
   socket.off('connect', onConnect)
   socket.off('authenticated', onAuthenticated)
+  socket.off('map-data', onMapData)
   socket.off('existing-users', onExistingUsers)
   socket.off('user-joined', onUserJoined)
   socket.off('user-moved', onUserMoved)
@@ -297,6 +321,10 @@ onUnmounted(() => {
 .grid {
   position: relative;
   background: #2c3e50;
+}
+
+.row {
+  display: flex;
 }
 
 .tile-wrapper {

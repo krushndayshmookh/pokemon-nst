@@ -5,6 +5,7 @@ const path = require('node:path')
 const { createServer } = require('node:http')
 const { Server } = require('socket.io')
 const database = require('./src/config/database')
+const gameMap = require('./src/game/map')
 
 const app = express()
 const server = createServer(app)
@@ -87,6 +88,13 @@ io.on('connection', (socket) => {
 
       // Send welcome with user data
       socket.emit('authenticated', userData)
+      
+      // Send map data
+      socket.emit('map-data', {
+        map: gameMap.map,
+        width: gameMap.WIDTH,
+        height: gameMap.HEIGHT
+      })
 
       // Send existing nearby players
       const nearbyUsers = Array.from(connectedUsers.values()).filter(u => u.socketId !== socket.id)
@@ -109,6 +117,17 @@ io.on('connection', (socket) => {
 
     // Validate movement
     if (typeof data.x !== 'number' || typeof data.y !== 'number') {
+      return
+    }
+
+    // Check collision
+    if (!gameMap.isWalkable(data.x, data.y)) {
+      // Reset user position to last known valid position
+      socket.emit('user-moved', {
+        userId: user.userId,
+        x: user.x,
+        y: user.y
+      })
       return
     }
 
